@@ -1,0 +1,44 @@
+{
+  "name": "colab-claude-codex",
+  "version": "1.0.0",
+  "description": "Claude Code × OpenAI Codex Collaboration System",
+  "main": "index.js",
+  "scripts": {
+    "codex:local-review": "node scripts/local-codex-review.js",
+    "codex:push-results": "node scripts/push-codex-results.js",
+    "codex:check": "node scripts/local-codex-review.js --check",
+    "codex:interactive": "node scripts/push-codex-results.js --interactive",
+    "codex:watch": "nodemon --watch src --ext js,ts,py --exec 'npm run codex:local-review'",
+    "setup": "npm install && npm run codex:check",
+    "test": "echo \"No tests configured yet\" && exit 0"
+  },
+  "keywords": [
+    "ai",
+    "codex",
+    "claude",
+    "code-review",
+    "github-actions",
+    "chatgpt"
+  ],
+  "author": "morimorijap",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
+    "@octokit/rest": "^20.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/morimorijap/colab_claude_codex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/morimorijap/colab_claude_codex/issues"
+  },
+  "homepage": "https://github.com/morimorijap/colab_claude_codex#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

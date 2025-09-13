@@ -42,7 +42,28 @@ cd colab_claude_codex
 gh repo create my-ai-collab --template morimorijap/colab_claude_codex
 ```
 
-### 2. GitHub Secretsの設定
+### 2. セットアップ方法を選択
+
+#### 🖥️ オプションA: ローカルCodex CLI（推奨 - ChatGPT Plus利用者）
+
+```bash
+# 依存関係インストール
+npm install
+
+# Codex CLIの確認
+npm run codex:check
+
+# ローカル設定
+cp .codex-config.yml .codex-config.local.yml
+# .codex-config.local.ymlを編集してユーザー名を追加
+```
+
+**メリット**:
+- ✅ API課金なし（ChatGPT Plus $20/月で使い放題）
+- ✅ 高速なローカル実行
+- ✅ オフライン作業可能
+
+#### ☁️ オプションB: GitHub Actions（API利用）
 
 リポジトリの Settings > Secrets and variables > Actions で以下を設定:
 
@@ -56,11 +77,36 @@ gh repo create my-ai-collab --template morimorijap/colab_claude_codex
 ```bash
 # GitHub Actionsを有効化
 gh workflow enable "Codex AI Review"
+gh workflow enable "Hybrid Codex Review" # ローカル優先
 gh workflow enable "Merge Consensus"
 gh workflow enable "Cleanup Old Branches"
 ```
 
 ## 💡 使用方法
+
+### 🖥️ ローカル実行（ChatGPT Plus利用）
+
+1. **コード変更後、ローカルでレビュー実行**
+```bash
+# Claude Codeのターミナルで実行
+npm run codex:local-review
+
+# 結果を確認
+cat .codex-results/latest-review.md
+```
+
+2. **結果をGitHub PRに投稿**
+```bash
+npm run codex:push-results
+```
+
+### ☁️ GitHub Actions経由の実行
+
+PRコメントでコマンドを実行:
+```
+/codex:review --local  # ローカル実行を促す
+/codex:review --remote # API経由で実行
+```
 
 ### 基本的なワークフロー
 

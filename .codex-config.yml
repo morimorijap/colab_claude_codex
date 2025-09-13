@@ -1,0 +1,139 @@
+# Codex Configuration
+# Settings for local and remote Codex integration
+
+# Execution mode: local, remote, or hybrid
+mode: hybrid
+
+# Local Codex CLI settings
+local:
+  # Command to run Codex CLI
+  command: codex
+
+  # Use ChatGPT Plus subscription (no API costs)
+  use_subscription: true
+
+  # Fallback to API if local fails
+  fallback_to_api: false
+
+  # Users who have ChatGPT Plus subscription
+  subscription_users:
+    - morimorijap
+
+# Remote API settings
+remote:
+  # Enable remote API usage
+  enabled: true
+
+  # API key source
+  api_key_source: github_secrets # or environment_variable
+
+  # Maximum API cost per month (USD)
+  monthly_limit: 10.00
+
+# Hybrid mode settings
+hybrid:
+  # Prefer local over remote when available
+  prefer_local: true
+
+  # Automatically detect best mode
+  auto_detect: true
+
+  # Force local for these users
+  local_priority_users:
+    - morimorijap
+
+# Review settings
+review:
+  # Automatically run on PR creation
+  auto_run: false
+
+  # File patterns to review
+  include_patterns:
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.py"
+    - "**/*.java"
+    - "**/*.go"
+    - "**/*.rs"
+    - "**/*.cpp"
+    - "**/*.c"
+
+  # Files to exclude
+  exclude_patterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/*.min.js"
+    - "**/*.test.js"
+    - "**/*.spec.js"
+
+  # Maximum files to review at once
+  max_files: 20
+
+  # Maximum lines per file
+  max_lines_per_file: 1000
+
+# ChatGPT Web Interface settings
+chatgpt_web:
+  # Enable web interface fallback
+  enabled: true
+
+  # Instructions template
+  prompt_template: |
+    Please review this code for:
+    1. Code quality and best practices
+    2. Performance improvements
+    3. Security vulnerabilities
+    4. Potential bugs
+    5. Suggestions for improvement
+
+  # Maximum characters to send to ChatGPT
+  max_chars: 4000
+
+# Output settings
+output:
+  # Save results to these formats
+  formats:
+    - json
+    - markdown
+
+  # Directory for results
+  directory: .codex-results
+
+  # Keep last N reviews
+  history_limit: 10
+
+# Notification settings
+notifications:
+  # Post results to PR automatically
+  auto_post: true
+
+  # Add labels to PR
+  add_labels: true
+
+  # Label prefix
+  label_prefix: "codex-"
+
+# Performance settings
+performance:
+  # Parallel file processing
+  parallel: true
+
+  # Maximum concurrent reviews
+  max_concurrent: 5
+
+  # Timeout per file (seconds)
+  timeout: 30
+
+# Debug settings
+debug:
+  # Enable verbose logging
+  verbose: false
+
+  # Save raw Codex responses
+  save_raw: false
+
+  # Log API calls
+  log_api_calls: false
