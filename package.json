@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "codex:local-review": "node scripts/local-codex-review.js",
+    "codex:review": "node scripts/local-codex-review.js",
     "codex:push-results": "node scripts/push-codex-results.js",
     "codex:check": "node scripts/local-codex-review.js --check",
     "codex:interactive": "node scripts/push-codex-results.js --interactive",

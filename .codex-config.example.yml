@@ -1,0 +1,79 @@
+# Example Codex Configuration
+# Copy this file to .codex-config.yml and customize for your setup
+
+# Execution mode: local, remote, or hybrid
+mode: hybrid
+
+# Local ChatGPT CLI settings
+local:
+  # Command to run ChatGPT CLI (if installed)
+  command: chatgpt  # or path to your CLI tool
+
+  # Use ChatGPT Plus subscription (no API costs)
+  use_subscription: true
+
+  # Fallback to API if local fails
+  fallback_to_api: false
+
+  # Your GitHub username (if you have ChatGPT Plus)
+  subscription_users:
+    - YOUR_GITHUB_USERNAME  # Replace with your GitHub username
+
+# Remote API settings
+remote:
+  # Enable remote API usage
+  enabled: true
+
+  # API key source
+  api_key_source: github_secrets
+
+  # Maximum API cost per month (USD)
+  monthly_limit: 10.00
+
+# Hybrid mode settings
+hybrid:
+  # Prefer local over remote when available
+  prefer_local: true
+
+  # Automatically detect best mode
+  auto_detect: true
+
+  # Force local for these users (add your username here)
+  local_priority_users:
+    - YOUR_GITHUB_USERNAME  # Replace with your GitHub username
+
+# Review settings
+review:
+  # Automatically run on PR creation
+  auto_run: false
+
+  # File patterns to review
+  include_patterns:
+    - "**/*.js"
+    - "**/*.ts"
+    - "**/*.py"
+    - "**/*.java"
+
+  # Files to exclude
+  exclude_patterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/*.min.js"
+
+  # Maximum files to review at once
+  max_files: 20
+
+# Output settings
+output:
+  # Save results to these formats
+  formats:
+    - json
+    - markdown
+
+  # Directory for results
+  directory: .codex-results
+
+# Debug settings
+debug:
+  # Enable verbose logging
+  verbose: false
