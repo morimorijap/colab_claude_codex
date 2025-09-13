@@ -1,0 +1,22 @@
+name: 'Post Codex Review'
+description: 'Post Codex analysis results as PR review comments'
+author: 'Colab Claude Codex'
+
+inputs:
+  analysis-file:
+    description: 'Path to the analysis JSON file'
+    required: true
+  pr-number:
+    description: 'Pull request number'
+    required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+branding:
+  icon: 'message-circle'
+  color: 'blue'

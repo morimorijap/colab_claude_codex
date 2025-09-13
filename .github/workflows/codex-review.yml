@@ -1,0 +1,241 @@
+name: Codex AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+    branches:
+      - 'codex-review/*'
+      - 'main'
+    paths:
+      - '**.js'
+      - '**.ts'
+      - '**.jsx'
+      - '**.tsx'
+      - '**.py'
+      - '**.java'
+      - '**.go'
+      - '**.rs'
+      - '**.cpp'
+      - '**.c'
+
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-trigger:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+      review-type: ${{ steps.check.outputs.review-type }}
+    steps:
+      - name: Check trigger conditions
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const context = require('@actions/github').context;
+
+            // Check if triggered by comment
+            if (context.eventName === 'issue_comment') {
+              const comment = context.payload.comment.body;
+              const isPR = context.payload.issue.pull_request;
+
+              if (!isPR) {
+                core.setOutput('should-run', 'false');
+                return;
+              }
+
+              // Check for codex commands
+              const commands = {
+                '/codex:refactoring': 'refactoring',
+                '/codex:review': 'review',
+                '/codex:suggest': 'suggest',
+                '/codex:security': 'security'
+              };
+
+              for (const [cmd, type] of Object.entries(commands)) {
+                if (comment.includes(cmd)) {
+                  core.setOutput('should-run', 'true');
+                  core.setOutput('review-type', type);
+                  return;
+                }
+              }
+
+              core.setOutput('should-run', 'false');
+            } else {
+              // Pull request event
+              const labels = context.payload.pull_request.labels.map(l => l.name);
+              const hasCodexLabel = labels.some(l => l.startsWith('codex-'));
+
+              core.setOutput('should-run', hasCodexLabel ? 'true' : 'false');
+              core.setOutput('review-type', 'comprehensive');
+            }
+
+  codex-analysis:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Codex CLI
+        run: |
+          # Note: This is a placeholder for the actual Codex CLI installation
+          # In production, this would install the real OpenAI Codex CLI
+          npm install -g @openai/codex-cli || echo "Using mock Codex CLI for demo"
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.patch
+          echo "diff-size=$(wc -l < pr_diff.patch)" >> $GITHUB_OUTPUT
+
+      - name: Analyze with Codex
+        id: analyze
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REVIEW_TYPE: ${{ needs.check-trigger.outputs.review-type }}
+        run: |
+          # Create analysis script
+          cat > analyze.js << 'EOF'
+          const fs = require('fs');
+          const crypto = require('crypto');
+
+          // Mock Codex analysis (replace with actual API call in production)
+          async function analyzeCode(diff, reviewType) {
+            const suggestions = [];
+            const lines = diff.split('\n');
+
+            // Simulate different review types
+            const reviewPatterns = {
+              refactoring: [
+                { pattern: /function\s+\w+\s*\([^)]*\)\s*{[^}]{100,}/g, message: 'Consider breaking down this large function' },
+                { pattern: /if\s*\([^)]*\)\s*{[^}]*if\s*\([^)]*\)/g, message: 'Nested conditionals could be simplified' },
+                { pattern: /for\s*\([^)]*\)\s*{[^}]*for\s*\([^)]*\)/g, message: 'Nested loops might impact performance' }
+              ],
+              security: [
+                { pattern: /eval\s*\(/g, message: 'Avoid using eval() for security reasons' },
+                { pattern: /innerHTML\s*=/g, message: 'Use textContent instead of innerHTML to prevent XSS' },
+                { pattern: /password|secret|key|token/gi, message: 'Ensure sensitive data is properly handled' }
+              ],
+              review: [
+                { pattern: /console\.(log|debug|info)/g, message: 'Remove debug statements before production' },
+                { pattern: /TODO|FIXME|HACK/g, message: 'Address TODO comments' },
+                { pattern: /\bcatch\s*\([^)]*\)\s*{\s*}/g, message: 'Empty catch blocks should handle errors' }
+              ]
+            };
+
+            const patterns = reviewPatterns[reviewType] || reviewPatterns.review;
+
+            lines.forEach((line, index) => {
+              if (line.startsWith('+') && !line.startsWith('+++')) {
+                patterns.forEach(({ pattern, message }) => {
+                  if (pattern.test(line)) {
+                    suggestions.push({
+                      type: reviewType,
+                      severity: 'warning',
+                      line: index + 1,
+                      message: message,
+                      suggestion: `Consider refactoring this code section`,
+                      confidence: 0.85
+                    });
+                  }
+                });
+              }
+            });
+
+            return suggestions;
+          }
+
+          // Main execution
+          (async () => {
+            try {
+              const diff = fs.readFileSync('pr_diff.patch', 'utf8');
+              const reviewType = process.env.REVIEW_TYPE || 'review';
+
+              const suggestions = await analyzeCode(diff, reviewType);
+
+              const analysis = {
+                timestamp: new Date().toISOString(),
+                review_type: reviewType,
+                total_suggestions: suggestions.length,
+                suggestions: suggestions.slice(0, 10) // Limit to 10 suggestions
+              };
+
+              fs.writeFileSync('analysis.json', JSON.stringify(analysis, null, 2));
+              console.log(`Analysis complete: ${suggestions.length} suggestions found`);
+
+            } catch (error) {
+              console.error('Analysis failed:', error);
+              process.exit(1);
+            }
+          })();
+          EOF
+
+          node analyze.js
+
+      - name: Post review comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const analysis = JSON.parse(fs.readFileSync('analysis.json', 'utf8'));
+
+            // Create review summary
+            const summary = `## 🤖 Codex AI Review Results
+
+            **Review Type**: ${analysis.review_type}
+            **Total Suggestions**: ${analysis.total_suggestions}
+            **Timestamp**: ${analysis.timestamp}
+
+            ### 📊 Analysis Summary
+            ${analysis.suggestions.length > 0 ?
+              analysis.suggestions.map((s, i) =>
+                `\n${i + 1}. **Line ${s.line}**: ${s.message}\n   - Severity: ${s.severity}\n   - Confidence: ${(s.confidence * 100).toFixed(0)}%`
+              ).join('\n') :
+              'No issues found! The code looks good. ✅'
+            }
+
+            ---
+            *This review was automatically generated by Codex AI. [Learn more](https://github.com/morimorijap/colab_claude_codex)*`;
+
+            // Post comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: summary
+            });
+
+            // Add labels based on analysis
+            if (analysis.total_suggestions > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: ['codex-reviewed', `suggestions-${analysis.total_suggestions}`]
+              });
+            }
+
+      - name: Upload analysis artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-analysis
+          path: |
+            analysis.json
+            pr_diff.patch
+          retention-days: 7

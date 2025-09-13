@@ -1,0 +1,216 @@
+name: Cleanup Old Branches
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry run (no actual deletion)'
+        required: false
+        default: 'false'
+        type: boolean
+      days-old:
+        description: 'Delete branches older than X days'
+        required: false
+        default: '7'
+        type: number
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-branches:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clean up old codex-review branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const dryRun = context.eventName === 'workflow_dispatch'
+              ? '${{ inputs.dry-run }}' === 'true'
+              : false;
+            const daysOld = context.eventName === 'workflow_dispatch'
+              ? parseInt('${{ inputs.days-old }}')
+              : 7;
+
+            core.info(`Configuration: Dry run = ${dryRun}, Days old = ${daysOld}`);
+
+            // Calculate cutoff date
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+            // Get all branches
+            const { data: branches } = await github.rest.repos.listBranches({
+              owner,
+              repo,
+              per_page: 100
+            });
+
+            // Filter codex-review branches
+            const codexBranches = branches.filter(b => b.name.startsWith('codex-review/'));
+            core.info(`Found ${codexBranches.length} codex-review branches`);
+
+            const deleted = [];
+            const kept = [];
+            const errors = [];
+
+            for (const branch of codexBranches) {
+              try {
+                // Get branch details
+                const { data: branchData } = await github.rest.repos.getBranch({
+                  owner,
+                  repo,
+                  branch: branch.name
+                });
+
+                // Check if branch has associated PR
+                const { data: prs } = await github.rest.pulls.list({
+                  owner,
+                  repo,
+                  head: `${owner}:${branch.name}`,
+                  state: 'all',
+                  per_page: 1
+                });
+
+                const lastCommitDate = new Date(branchData.commit.commit.committer.date);
+                const isOld = lastCommitDate < cutoffDate;
+                const hasPR = prs.length > 0;
+                const isPRClosed = hasPR && prs[0].state === 'closed';
+                const isPRMerged = hasPR && prs[0].merged_at !== null;
+
+                // Decide if should delete
+                const shouldDelete = isOld && (!hasPR || isPRClosed || isPRMerged);
+
+                if (shouldDelete) {
+                  if (!dryRun) {
+                    await github.rest.git.deleteRef({
+                      owner,
+                      repo,
+                      ref: `heads/${branch.name}`
+                    });
+                  }
+                  deleted.push({
+                    name: branch.name,
+                    last_commit: lastCommitDate.toISOString(),
+                    pr_status: hasPR ? (isPRMerged ? 'merged' : 'closed') : 'no PR'
+                  });
+                  core.info(`${dryRun ? '[DRY RUN] Would delete' : 'Deleted'}: ${branch.name}`);
+                } else {
+                  kept.push({
+                    name: branch.name,
+                    last_commit: lastCommitDate.toISOString(),
+                    reason: !isOld ? 'too recent' : 'has open PR'
+                  });
+                  core.info(`Kept: ${branch.name} (${!isOld ? 'too recent' : 'has open PR'})`);
+                }
+
+              } catch (error) {
+                errors.push({
+                  branch: branch.name,
+                  error: error.message
+                });
+                core.warning(`Failed to process ${branch.name}: ${error.message}`);
+              }
+            }
+
+            // Create summary
+            const summary = `# Branch Cleanup Report
+
+            **Date**: ${new Date().toISOString()}
+            **Mode**: ${dryRun ? 'DRY RUN' : 'ACTUAL DELETION'}
+            **Cutoff**: Branches older than ${daysOld} days
+
+            ## Summary
+            - **Total codex-review branches**: ${codexBranches.length}
+            - **Deleted**: ${deleted.length}
+            - **Kept**: ${kept.length}
+            - **Errors**: ${errors.length}
+
+            ## Deleted Branches
+            ${deleted.length > 0 ? deleted.map(b =>
+              `- \`${b.name}\` (last commit: ${b.last_commit}, PR: ${b.pr_status})`
+            ).join('\n') : 'None'}
+
+            ## Kept Branches
+            ${kept.length > 0 ? kept.map(b =>
+              `- \`${b.name}\` (${b.reason})`
+            ).join('\n') : 'None'}
+
+            ## Errors
+            ${errors.length > 0 ? errors.map(e =>
+              `- \`${e.branch}\`: ${e.error}`
+            ).join('\n') : 'None'}`;
+
+            // Write summary to file
+            require('fs').writeFileSync('cleanup-summary.md', summary);
+            core.info(summary);
+
+            // Create issue if errors occurred
+            if (errors.length > 0 && !dryRun) {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title: `Branch Cleanup Errors - ${new Date().toDateString()}`,
+                body: summary,
+                labels: ['maintenance', 'automated']
+              });
+            }
+
+      - name: Upload cleanup report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-report
+          path: cleanup-summary.md
+          retention-days: 30
+
+  cleanup-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clean up old workflow artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const daysOld = 30; // Keep artifacts for 30 days
+
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+            // List artifacts
+            const { data: artifacts } = await github.rest.actions.listArtifactsForRepo({
+              owner,
+              repo,
+              per_page: 100
+            });
+
+            core.info(`Found ${artifacts.artifacts.length} artifacts`);
+
+            let deletedCount = 0;
+            for (const artifact of artifacts.artifacts) {
+              const createdDate = new Date(artifact.created_at);
+
+              if (createdDate < cutoffDate) {
+                try {
+                  await github.rest.actions.deleteArtifact({
+                    owner,
+                    repo,
+                    artifact_id: artifact.id
+                  });
+                  deletedCount++;
+                  core.info(`Deleted artifact: ${artifact.name} (created: ${artifact.created_at})`);
+                } catch (error) {
+                  core.warning(`Failed to delete artifact ${artifact.name}: ${error.message}`);
+                }
+              }
+            }
+
+            core.info(`Deleted ${deletedCount} old artifacts`);

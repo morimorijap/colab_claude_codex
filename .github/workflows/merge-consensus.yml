@@ -1,0 +1,218 @@
+name: Merge Consensus
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+  workflow_run:
+    workflows: ["Codex AI Review"]
+    types: [completed]
+
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-consensus:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/merge'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check merge criteria
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            let prNumber;
+
+            // Get PR number based on event type
+            if (context.eventName === 'pull_request_review') {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.eventName === 'issue_comment') {
+              if (!context.payload.issue.pull_request) {
+                core.setOutput('can-merge', 'false');
+                return;
+              }
+              prNumber = context.payload.issue.number;
+            } else if (context.eventName === 'workflow_run') {
+              // Extract PR number from workflow run
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: context.payload.workflow_run.workflow_id,
+                per_page: 1
+              });
+
+              if (runs.data.workflow_runs.length > 0 && runs.data.workflow_runs[0].pull_requests.length > 0) {
+                prNumber = runs.data.workflow_runs[0].pull_requests[0].number;
+              } else {
+                core.setOutput('can-merge', 'false');
+                return;
+              }
+            }
+
+            // Get PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            // Check if PR is from codex-review branch
+            const isCodexBranch = pr.head.ref.startsWith('codex-review/');
+
+            // Get PR reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            // Check for approvals
+            const approvals = reviews.filter(r => r.state === 'APPROVED');
+            const hasHumanApproval = approvals.some(r => !r.user.login.includes('bot'));
+            const hasCodexApproval = pr.labels.some(l => l.name === 'codex-approved');
+
+            // Get check runs
+            const { data: checks } = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: pr.head.sha
+            });
+
+            const allChecksPassed = checks.check_runs.every(
+              check => check.conclusion === 'success' || check.conclusion === 'skipped'
+            );
+
+            // Determine merge criteria
+            const criteria = {
+              is_codex_branch: isCodexBranch,
+              has_human_approval: hasHumanApproval,
+              has_codex_approval: hasCodexApproval,
+              all_checks_passed: allChecksPassed,
+              is_mergeable: pr.mergeable && !pr.merged,
+              has_conflicts: pr.mergeable_state === 'conflicting'
+            };
+
+            // Decide if can merge
+            const canMerge = criteria.is_mergeable &&
+                           criteria.all_checks_passed &&
+                           !criteria.has_conflicts &&
+                           (criteria.has_human_approval || (criteria.is_codex_branch && criteria.has_codex_approval));
+
+            core.setOutput('can-merge', canMerge.toString());
+            core.setOutput('pr-number', prNumber.toString());
+            core.setOutput('criteria', JSON.stringify(criteria));
+
+            // Post status comment
+            const statusMessage = `## 🤝 Merge Consensus Status
+
+            **PR #${prNumber}**: ${pr.title}
+
+            ### Criteria Check:
+            - ✅ Codex Branch: ${criteria.is_codex_branch ? 'Yes' : 'No'}
+            - ✅ Human Approval: ${criteria.has_human_approval ? 'Yes' : 'No'}
+            - ✅ Codex Approval: ${criteria.has_codex_approval ? 'Yes' : 'No'}
+            - ✅ All Checks Passed: ${criteria.all_checks_passed ? 'Yes' : 'No'}
+            - ✅ No Conflicts: ${!criteria.has_conflicts ? 'Yes' : 'No'}
+            - ✅ Mergeable: ${criteria.is_mergeable ? 'Yes' : 'No'}
+
+            ### Decision: ${canMerge ? '✅ Ready to merge' : '❌ Not ready to merge'}
+
+            ${!canMerge ? `
+            **Required Actions:**
+            ${!criteria.has_human_approval && !criteria.is_codex_branch ? '- Obtain human approval' : ''}
+            ${!criteria.all_checks_passed ? '- Fix failing checks' : ''}
+            ${criteria.has_conflicts ? '- Resolve merge conflicts' : ''}
+            ` : ''}`;
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: statusMessage
+            });
+
+      - name: Auto-merge if criteria met
+        if: steps.check.outputs.can-merge == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ steps.check.outputs.pr-number }}');
+            const { owner, repo } = context.repo;
+
+            try {
+              // Get PR details
+              const { data: pr } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: prNumber
+              });
+
+              // Merge the PR
+              const { data: merge } = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: prNumber,
+                merge_method: 'squash', // or 'merge' or 'rebase'
+                commit_title: `Merge PR #${prNumber}: ${pr.title}`,
+                commit_message: `Automated merge after consensus criteria met.
+
+                Co-authored-by: Codex AI <codex@openai.com>
+                Co-authored-by: Claude AI <claude@anthropic.com>`
+              });
+
+              core.info(`Successfully merged PR #${prNumber}`);
+
+              // Post merge confirmation
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: `## ✅ PR Merged Successfully
+
+                **Merge SHA**: ${merge.sha}
+                **Method**: Squash and merge
+
+                This PR was automatically merged after meeting consensus criteria.`
+              });
+
+              // Clean up branch if it's a codex-review branch
+              if (pr.head.ref.startsWith('codex-review/')) {
+                try {
+                  await github.rest.git.deleteRef({
+                    owner,
+                    repo,
+                    ref: `heads/${pr.head.ref}`
+                  });
+                  core.info(`Deleted branch: ${pr.head.ref}`);
+                } catch (error) {
+                  core.warning(`Failed to delete branch: ${error.message}`);
+                }
+              }
+
+            } catch (error) {
+              core.setFailed(`Failed to merge PR: ${error.message}`);
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: `## ❌ Auto-merge Failed
+
+                **Error**: ${error.message}
+
+                Please merge manually or resolve the issue and retry.`
+              });
+            }

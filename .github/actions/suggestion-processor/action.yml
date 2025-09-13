@@ -1,0 +1,35 @@
+name: 'Process Codex Suggestions'
+description: 'Apply selected Codex suggestions to the codebase'
+author: 'Colab Claude Codex'
+
+inputs:
+  suggestions-file:
+    description: 'Path to the suggestions JSON file'
+    required: true
+  apply-list:
+    description: 'Comma-separated list of suggestion IDs to apply'
+    required: false
+    default: ''
+  auto-apply:
+    description: 'Automatically apply low-risk suggestions'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  applied-count:
+    description: 'Number of suggestions applied'
+  failed-count:
+    description: 'Number of suggestions that failed to apply'
+  commit-sha:
+    description: 'SHA of the commit with applied suggestions'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+branding:
+  icon: 'git-merge'
+  color: 'green'
