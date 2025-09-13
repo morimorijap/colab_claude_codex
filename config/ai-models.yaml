@@ -1,0 +1,146 @@
+# AI Model Configuration
+# This file defines available AI models and their capabilities
+
+models:
+  # OpenAI Codex
+  codex:
+    provider: openai
+    endpoint: https://api.openai.com/v1
+    model: code-davinci-002
+    capabilities:
+      - refactoring
+      - optimization
+      - security
+      - documentation
+    settings:
+      max_tokens: 4000
+      temperature: 0.3
+      top_p: 1.0
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+
+  # GPT-4 for advanced analysis
+  gpt4:
+    provider: openai
+    endpoint: https://api.openai.com/v1
+    model: gpt-4-turbo-preview
+    capabilities:
+      - architecture
+      - complex_analysis
+      - security_audit
+    settings:
+      max_tokens: 8000
+      temperature: 0.2
+
+  # GPT-3.5 for quick reviews
+  gpt35:
+    provider: openai
+    endpoint: https://api.openai.com/v1
+    model: gpt-3.5-turbo
+    capabilities:
+      - quick_review
+      - syntax_check
+      - formatting
+    settings:
+      max_tokens: 2000
+      temperature: 0.1
+
+  # Claude (when API is available)
+  claude:
+    provider: anthropic
+    endpoint: https://api.anthropic.com/v1
+    model: claude-3-opus
+    capabilities:
+      - reasoning
+      - architecture
+      - documentation
+      - testing
+    settings:
+      max_tokens: 100000
+      temperature: 0.3
+
+  # Local LLM (for development/testing)
+  local:
+    provider: local
+    endpoint: http://localhost:8080/v1
+    model: codellama-13b
+    capabilities:
+      - basic_review
+      - syntax_check
+    settings:
+      max_tokens: 2048
+      temperature: 0.2
+
+# Model selection rules
+selection_rules:
+  # Based on review type
+  by_review_type:
+    refactoring:
+      primary: codex
+      fallback: gpt4
+    security:
+      primary: gpt4
+      fallback: codex
+    quick:
+      primary: gpt35
+      fallback: local
+    architecture:
+      primary: claude
+      fallback: gpt4
+
+  # Based on file type
+  by_file_type:
+    javascript:
+      - codex
+      - gpt4
+    python:
+      - codex
+      - gpt4
+    typescript:
+      - codex
+      - gpt4
+    rust:
+      - gpt4
+      - codex
+    documentation:
+      - claude
+      - gpt4
+
+# Rate limiting configuration
+rate_limits:
+  openai:
+    requests_per_minute: 60
+    tokens_per_minute: 90000
+  anthropic:
+    requests_per_minute: 50
+    tokens_per_minute: 100000
+  local:
+    requests_per_minute: 100
+    tokens_per_minute: 50000
+
+# Cost optimization
+cost_optimization:
+  # Use cheaper models for simple tasks
+  enable_tiered_selection: true
+
+  # Cache similar requests
+  cache_duration: 3600 # seconds
+
+  # Batch processing
+  batch_size: 5
+  batch_wait: 1000 # milliseconds
+
+# Fallback configuration
+fallback:
+  # Enable automatic fallback to alternative models
+  enabled: true
+
+  # Maximum retry attempts
+  max_retries: 3
+
+  # Retry delay (exponential backoff)
+  retry_delay_base: 1000 # milliseconds
+
+  # Models to exclude from fallback
+  exclude:
+    - local

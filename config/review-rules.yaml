@@ -1,0 +1,228 @@
+# Code Review Rules Configuration
+# Define patterns and rules for automated code review
+
+# Global settings
+global:
+  # Enable/disable specific rule categories
+  enabled_categories:
+    - security
+    - performance
+    - best_practices
+    - style
+    - documentation
+
+  # Severity levels that trigger automatic actions
+  auto_action_severity:
+    error: block_merge
+    warning: require_review
+    info: suggest_only
+
+# Language-specific rules
+languages:
+  javascript:
+    file_extensions: [.js, .jsx, .mjs]
+    rules:
+      # Security rules
+      security:
+        - name: no-eval
+          pattern: '\beval\s*\('
+          message: "Avoid using eval() due to security risks"
+          severity: error
+          suggestion: "Use JSON.parse() or Function constructor instead"
+
+        - name: no-innerHTML
+          pattern: '\.innerHTML\s*='
+          message: "Use textContent or createElement to prevent XSS"
+          severity: warning
+
+        - name: no-hardcoded-secrets
+          pattern: '(api[_-]?key|password|secret|token)\s*[:=]\s*["\'][^"\']+["\']'
+          message: "Never hardcode secrets in source code"
+          severity: error
+
+      # Performance rules
+      performance:
+        - name: avoid-nested-loops
+          pattern: 'for\s*\([^)]*\)\s*\{[^}]*for\s*\([^)]*\)'
+          message: "Nested loops can impact performance"
+          severity: warning
+          confidence: 0.7
+
+        - name: use-const
+          pattern: '\blet\s+\w+\s*=\s*[^;]+;\s*(?!.*\1\s*=)'
+          message: "Use const for variables that don't change"
+          severity: info
+
+      # Best practices
+      best_practices:
+        - name: no-console-log
+          pattern: 'console\.(log|debug|info)\s*\('
+          message: "Remove console statements before production"
+          severity: warning
+          ignore_paths: ['**/debug/**', '**/test/**']
+
+        - name: handle-promise-rejection
+          pattern: '\.then\s*\([^)]*\)\s*(?!\.catch)'
+          message: "Add .catch() to handle promise rejections"
+          severity: warning
+
+  typescript:
+    file_extensions: [.ts, .tsx]
+    inherits: javascript # Inherit JavaScript rules
+    rules:
+      # TypeScript specific
+      typing:
+        - name: no-any
+          pattern: ':\s*any\b'
+          message: "Avoid using 'any' type"
+          severity: warning
+          suggestion: "Use specific types or 'unknown'"
+
+        - name: explicit-return-type
+          pattern: 'function\s+\w+\s*\([^)]*\)\s*\{'
+          message: "Add explicit return type"
+          severity: info
+
+  python:
+    file_extensions: [.py]
+    rules:
+      # Pythonic practices
+      style:
+        - name: use-f-strings
+          pattern: '["\']\s*%\s*\(|\.format\s*\('
+          message: "Use f-strings for better readability"
+          severity: info
+          min_python_version: "3.6"
+
+        - name: naming-convention
+          pattern: 'def\s+[A-Z]\w*\s*\('
+          message: "Function names should be lowercase with underscores"
+          severity: warning
+
+      # Documentation
+      documentation:
+        - name: missing-docstring
+          pattern: 'def\s+\w+\s*\([^)]*\):\s*\n\s*(?!["\'])'
+          message: "Add docstring to document function"
+          severity: info
+
+      # Security
+      security:
+        - name: sql-injection
+          pattern: 'execute\s*\(\s*["\'].*%s|\.format\s*\(\s*.*\)\s*\)'
+          message: "Use parameterized queries to prevent SQL injection"
+          severity: error
+
+  java:
+    file_extensions: [.java]
+    rules:
+      # Java best practices
+      best_practices:
+        - name: null-check
+          pattern: '(?<!if\s*\(\s*\w+\s*!=\s*null.*)\.\w+\s*\('
+          message: "Add null check before method call"
+          severity: warning
+          confidence: 0.6
+
+        - name: close-resources
+          pattern: 'new\s+(FileInputStream|FileOutputStream|Scanner)\s*\('
+          message: "Use try-with-resources for auto-closing"
+          severity: warning
+
+  go:
+    file_extensions: [.go]
+    rules:
+      # Go idioms
+      idioms:
+        - name: error-check
+          pattern: '_\s*:=\s*\w+\('
+          message: "Don't ignore errors with underscore"
+          severity: warning
+
+        - name: uppercase-const
+          pattern: 'const\s+[a-z]\w*\s*='
+          message: "Constants should be uppercase"
+          severity: info
+
+# Custom review patterns
+custom_patterns:
+  # Large functions
+  - name: large-function
+    description: "Detect overly large functions"
+    languages: [javascript, typescript, python, java]
+    pattern: 'function\s+\w+\s*\([^)]*\)\s*\{[^}]{500,}'
+    message: "Function is too large. Consider breaking it down"
+    severity: warning
+    threshold:
+      lines: 50
+      complexity: 10
+
+  # TODO comments
+  - name: todo-comments
+    description: "Track TODO comments"
+    languages: all
+    pattern: '//\s*(TODO|FIXME|HACK|XXX|BUG)'
+    message: "Address TODO comment: {match}"
+    severity: info
+    action: create_issue
+
+  # Deprecated APIs
+  - name: deprecated-api
+    description: "Detect usage of deprecated APIs"
+    languages: all
+    pattern: '@deprecated|\bdeprecated\b'
+    message: "Using deprecated API"
+    severity: warning
+
+# Ignore patterns
+ignore:
+  # Files to skip
+  files:
+    - "**/node_modules/**"
+    - "**/vendor/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/*.min.js"
+    - "**/*.generated.*"
+
+  # Specific lines to ignore
+  inline_markers:
+    - "codex-ignore"
+    - "eslint-disable"
+    - "prettier-ignore"
+    - "noqa"
+
+# Severity configuration
+severity_config:
+  # How to handle each severity level
+  error:
+    block_merge: true
+    require_fix: true
+    notify: ["author", "reviewers"]
+
+  warning:
+    block_merge: false
+    require_review: true
+    notify: ["author"]
+
+  info:
+    block_merge: false
+    require_review: false
+    notify: []
+
+# Auto-fix configuration
+auto_fix:
+  # Enable automatic fixing for certain issues
+  enabled: true
+
+  # Rules that can be auto-fixed
+  fixable_rules:
+    - use-const
+    - use-f-strings
+    - naming-convention
+
+  # Require approval before applying fixes
+  require_approval: true
+
+  # Maximum number of auto-fixes per PR
+  max_fixes_per_pr: 20
